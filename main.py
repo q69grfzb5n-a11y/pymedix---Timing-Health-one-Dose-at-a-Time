@@ -277,7 +277,7 @@ class Medication:
     Includes schedule parameters and helper methods to compute dose times.
     """
 
-    def __init__(self, patient, name, dosage_mg, times_per_day, first_time, duration_days, start_date):
+    def _init_(self, patient, name, dosage_mg, times_per_day, first_time, duration_days, start_date):
         """
         Initialize a Medication object and validate inputs.
 
@@ -394,7 +394,7 @@ class MedicationSchedule:
     Manages medications for a single patient (CRUD operations on the meds DataFrame).
     """
 
-    def __init__(self, patient_name):
+    def _init_(self, patient_name):
         """
         Initialize schedule for a patient.
 
@@ -482,7 +482,7 @@ class Reminder:
     Uses Medication objects reconstructed from DataFrame rows.
     """
 
-    def __init__(self, schedule: MedicationSchedule):
+    def _init_(self, schedule: MedicationSchedule):
         """
         Initialize reminder helper.
 
@@ -696,7 +696,7 @@ def daily_summary_file(patient, meds_df, log_df):
     print("TAKEN:", taken)
     print("MISSED:", missed)
 
-    filename = f"report_{patient}_{today}.txt".replace(" ", "_")
+    filename = f"report_{patient}{today}.txt".replace(" ", "")
     with open(filename, "w", encoding="utf-8") as f:
         f.write("Daily Report\n")
         f.write(f"Patient: {patient}\n")
@@ -851,6 +851,694 @@ def main():
             print_red(e)
 
 
-if __name__ == "__main__":
+if _name_ == "_main_":
     main()
+# ==========================================
+# PyMedix - Full Tkinter GUI (Multi-Patients)
+# (No Visualization) + Fixed Logo + 2-Column Menu
+# ==========================================
+
+import os
+import pandas as pd
+import tkinter as tk
+from tkinter import ttk, messagebox
+from datetime import datetime, timedelta, date
+
+# Pillow for logo
+from PIL import Image, ImageTk
+
+
+# =========================
+# Colors / Theme
+# =========================
+BG_ROOT = "#0a192f"
+BG_MAIN = "#102a43"
+BG_CONTENT = "#1c4e80"
+
+BTN_BG = "#1976d2"
+BTN_BG_ACTIVE = "#0d47a1"
+TXT_HEADER = "#bbdefb"
+
+
+# =========================
+# Validation Helpers
+# =========================
+def parse_time_hhmm(value: str):
+    """Parse HH:MM time string into a datetime.time object."""
+    try:
+        return datetime.strptime(value.strip(), "%H:%M").time()
+    except Exception:
+        raise ValueError("Invalid time format. Use HH:MM (e.g., 08:30).")
+
+
+def parse_date_flexible(value: str):
+    """Parse multiple date formats into a datetime.date object."""
+    patterns = ["%Y-%m-%d", "%Y/%m/%d", "%d/%m/%Y", "%d-%m-%Y"]
+    v = value.strip()
+    for p in patterns:
+        try:
+            return datetime.strptime(v, p).date()
+        except Exception:
+            pass
+    raise ValueError("Invalid date format. Use YYYY-MM-DD or DD/MM/YYYY, etc.")
+
+
+def ensure_positive_number(x, name="value"):
+    """Ensure numeric value is positive."""
+    if x <= 0:
+        raise ValueError(f"{name} must be > 0")
+    return x
+
+
+# =========================
+# Data Storage (CSV)
+# =========================
+DATA_DIR = "pymedix_data"
+MEDS_CSV = os.path.join(DATA_DIR, "medications.csv")
+LOG_CSV = os.path.join(DATA_DIR, "dose_log.csv")
+
+MEDS_COLUMNS = [
+    "patient_name",
+    "medication",
+    "dosage_mg",
+    "times_per_day",
+    "first_time",       # HH:MM
+    "duration_days",
+    "start_date"        # YYYY-MM-DD
+]
+
+LOG_COLUMNS = [
+    "patient_name",
+    "medication",
+    "dose_time",        # YYYY-MM-DD HH:MM
+    "status"            # TAKEN / MISSED
+]
+
+
+def _ensure_data_dir():
+    os.makedirs(DATA_DIR, exist_ok=True)
+
+
+def load_meds():
+    """Load medications dataframe from CSV (or empty)."""
+    _ensure_data_dir()
+    if os.path.exists(MEDS_CSV):
+        df = pd.read_csv(MEDS_CSV)
+        # ensure columns exist
+        for c in MEDS_COLUMNS:
+            if c not in df.columns:
+                df[c] = None
+        return df[MEDS_COLUMNS].copy()
+    return pd.DataFrame(columns=MEDS_COLUMNS)
+
+
+def save_meds(df: pd.DataFrame):
+    """Save medications dataframe to CSV."""
+    _ensure_data_dir()
+    df.to_csv(MEDS_CSV, index=False)
+
+
+def load_log():
+    """Load log dataframe from CSV (or empty)."""
+    _ensure_data_dir()
+    if os.path.exists(LOG_CSV):
+        df = pd.read_csv(LOG_CSV)
+        for c in LOG_COLUMNS:
+            if c not in df.columns:
+                df[c] = None
+        return df[LOG_COLUMNS].copy()
+    return pd.DataFrame(columns=LOG_COLUMNS)
+
+
+def save_log(df: pd.DataFrame):
+    """Save log dataframe to CSV."""
+    _ensure_data_dir()
+    df.to_csv(LOG_CSV, index=False)
+
+
+def list_patients(meds_df: pd.DataFrame, log_df: pd.DataFrame):
+    """Return sorted unique patient names from meds and log."""
+    names = set()
+    if not meds_df.empty:
+        names |= set(meds_df["patient_name"].dropna().astype(str).str.strip())
+    if not log_df.empty:
+        names |= set(log_df["patient_name"].dropna().astype(str).str.strip())
+    names = {n for n in names if n}
+    return sorted(names, key=lambda x: x.lower())
+
+
+# =========================
+# Core Logic
+# =========================
+class Medication:
+    """Medication record container."""
+    def _init_(self, patient_name, medication, dosage_mg, times_per_day,
+                 first_time, duration_days, start_date):
+        self.patient_name = patient_name
+        self.medication = medication
+        self.dosage_mg = dosage_mg
+        self.times_per_day = times_per_day
+        self.first_time = first_time
+        self.duration_days = duration_days
+        self.start_date = start_date
+
+
+class MedicationSchedule:
+    """Schedule manager for a patient."""
+    def _init_(self, patient_name: str):
+        self.patient_name = patient_name.strip()
+
+    def add_medication(self, med: Medication, meds_df: pd.DataFrame) -> pd.DataFrame:
+        """Add medication row to meds_df."""
+        name = med.medication.strip()
+        if not name:
+            raise ValueError("Medication name is required.")
+
+        row = {
+            "patient_name": self.patient_name,
+            "medication": name,
+            "dosage_mg": float(ensure_positive_number(med.dosage_mg, "dosage_mg")),
+            "times_per_day": int(ensure_positive_number(med.times_per_day, "times_per_day")),
+            "first_time": med.first_time.strftime("%H:%M"),
+            "duration_days": int(ensure_positive_number(med.duration_days, "duration_days")),
+            "start_date": med.start_date.isoformat(),
+        }
+
+        new_df = pd.concat([meds_df, pd.DataFrame([row])], ignore_index=True)
+        save_meds(new_df)
+        return new_df
+
+    def remove_medication(self, med_name: str, meds_df: pd.DataFrame) -> pd.DataFrame:
+        """Remove medication (by name) for this patient."""
+        med_name = med_name.strip()
+        if not med_name:
+            raise ValueError("Enter medication name to delete.")
+
+        before = len(meds_df)
+        new_df = meds_df[~(
+            (meds_df["patient_name"].astype(str) == self.patient_name) &
+            (meds_df["medication"].astype(str).str.lower() == med_name.lower())
+        )].copy()
+
+        if len(new_df) == before:
+            raise ValueError("Medication not found for this patient.")
+
+        save_meds(new_df)
+        return new_df
+
+    def get_patient_meds_df(self, meds_df: pd.DataFrame) -> pd.DataFrame:
+        """Filter meds_df for this patient."""
+        if meds_df.empty:
+            return meds_df.copy()
+        df = meds_df[meds_df["patient_name"].astype(str) == self.patient_name].copy()
+        return df.reset_index(drop=True)
+
+
+class Reminder:
+    """Reports helper class."""
+    def _init_(self, schedule: MedicationSchedule):
+        self.schedule = schedule
+
+    def due_soon(self, meds_df: pd.DataFrame, now: datetime) -> pd.DataFrame:
+        """
+        Simple 'due soon': meds whose next scheduled time is within the next 90 minutes.
+        (Basic logic: uses first_time + evenly spaced doses per day from start_date)
+        """
+        patient = self.schedule.patient_name
+        pm = meds_df[meds_df["patient_name"].astype(str) == patient].copy()
+        if pm.empty:
+            return pd.DataFrame()
+
+        results = []
+        for _, r in pm.iterrows():
+            try:
+                med = str(r["medication"])
+                times = int(r["times_per_day"])
+                first = parse_time_hhmm(str(r["first_time"]))
+                start = parse_date_flexible(str(r["start_date"]))
+                dur = int(r["duration_days"])
+            except Exception:
+                continue
+
+            # check if still active
+            end_date = start + timedelta(days=dur - 1)
+            if now.date() < start or now.date() > end_date:
+                continue
+
+            # generate today dose times
+            if times <= 0:
+                continue
+            interval_minutes = int(24 * 60 / times)
+            t0 = datetime.combine(now.date(), first)
+            for k in range(times):
+                t = t0 + timedelta(minutes=k * interval_minutes)
+                delta = (t - now).total_seconds() / 60
+                if 0 <= delta <= 90:
+                    results.append({
+                        "patient_name": patient,
+                        "medication": med,
+                        "due_time": t.strftime("%Y-%m-%d %H:%M"),
+                        "in_minutes": int(delta)
+                    })
+
+        if not results:
+            return pd.DataFrame()
+        return pd.DataFrame(results).sort_values(["in_minutes", "medication"]).reset_index(drop=True)
+
+    def daily_report(self, meds_df: pd.DataFrame, log_df: pd.DataFrame, day: date) -> pd.DataFrame:
+        """Daily report: all meds for patient + taken/missed count for that date."""
+        patient = self.schedule.patient_name
+        pm = meds_df[meds_df["patient_name"].astype(str) == patient].copy()
+        if pm.empty:
+            return pd.DataFrame()
+
+        # Filter logs for this patient/day
+        pl = log_df[log_df["patient_name"].astype(str) == patient].copy()
+        if not pl.empty:
+            pl["dose_time"] = pd.to_datetime(pl["dose_time"], errors="coerce")
+            pl = pl[pl["dose_time"].dt.date == day]
+
+        rows = []
+        for _, r in pm.iterrows():
+            med = str(r["medication"])
+            taken = 0
+            missed = 0
+            if not pl.empty:
+                m = pl[pl["medication"].astype(str).str.lower() == med.lower()]
+                taken = int((m["status"].astype(str) == "TAKEN").sum())
+                missed = int((m["status"].astype(str) == "MISSED").sum())
+
+            rows.append({
+                "patient_name": patient,
+                "medication": med,
+                "dosage_mg": r["dosage_mg"],
+                "times_per_day": r["times_per_day"],
+                "start_date": r["start_date"],
+                "duration_days": r["duration_days"],
+                "taken_today": taken,
+                "missed_today": missed
+            })
+
+        return pd.DataFrame(rows)
+
+
+def log_dose(patient_name: str, medication: str, time_hhmm: str, status: str,
+             meds_df: pd.DataFrame, log_df: pd.DataFrame) -> pd.DataFrame:
+    """Append a dose log entry after validation."""
+    patient_name = patient_name.strip()
+    medication = medication.strip()
+    if not patient_name:
+        raise ValueError("No active patient.")
+    if not medication:
+        raise ValueError("Medication name is required.")
+    if status not in ("TAKEN", "MISSED"):
+        raise ValueError("Status must be TAKEN or MISSED.")
+
+    # validate time
+    t = parse_time_hhmm(time_hhmm)
+
+    # optional: ensure medication exists for that patient
+    exists = False
+    if not meds_df.empty:
+        x = meds_df[
+            (meds_df["patient_name"].astype(str) == patient_name) &
+            (meds_df["medication"].astype(str).str.lower() == medication.lower())
+        ]
+        exists = not x.empty
+    if not exists:
+        raise ValueError("This medication is not found for the active patient.")
+
+    dt = datetime.combine(datetime.now().date(), t)
+
+    row = {
+        "patient_name": patient_name,
+        "medication": medication,
+        "dose_time": dt.strftime("%Y-%m-%d %H:%M"),
+        "status": status
+    }
+
+    new_log = pd.concat([log_df, pd.DataFrame([row])], ignore_index=True)
+    save_log(new_log)
+    return new_log
+
+
+# =========================
+# Tkinter App
+# =========================
+meds_df = load_meds()
+log_df = load_log()
+
+schedule = None
+reminder = None
+
+root = tk.Tk()
+root.title("Pymedix - Medication Management System")
+root.geometry("1200x700")
+root.configure(bg=BG_ROOT)
+
+# ---------- STYLE ----------
+style = ttk.Style()
+style.theme_use("clam")
+
+style.configure("TButton",
+    background=BTN_BG,
+    foreground="white",
+    font=("Segoe UI", 11),
+    padding=8
+)
+style.map("TButton",
+    background=[("active", BTN_BG_ACTIVE)]
+)
+
+style.configure("TLabel",
+    background=BG_ROOT,
+    foreground="white",
+    font=("Segoe UI", 11)
+)
+
+style.configure("HeaderTitle.TLabel",
+    font=("Segoe UI", 28, "bold"),
+    foreground=TXT_HEADER,
+    background=BG_ROOT
+)
+
+style.configure("HeaderSub.TLabel",
+    font=("Segoe UI", 14),
+    foreground="white",
+    background=BG_ROOT
+)
+
+# =========================
+# HEADER (Logo + Title)
+# =========================
+header = tk.Frame(root, bg=BG_ROOT)
+header.pack(fill="x", pady=10)
+
+logo_label = tk.Label(header, bg=BG_ROOT)
+logo_label.grid(row=0, column=0, rowspan=2, padx=(20, 10), sticky="w")
+
+title_box = tk.Frame(header, bg=BG_ROOT)
+title_box.grid(row=0, column=1, sticky="w")
+
+ttk.Label(title_box, text="Pymedix", style="HeaderTitle.TLabel").pack(anchor="w")
+ttk.Label(title_box, text="A Python-Based Medication Management Project", style="HeaderSub.TLabel").pack(anchor="w")
+
+header.grid_columnconfigure(1, weight=1)
+
+# Load logo (fixed size; doesn't affect sidebar/menu)
+def load_logo(path: str, size=(120, 120)):
+    try:
+        img = Image.open(path)
+        img = img.resize(size)  # keep whatever you want
+        logo_img = ImageTk.PhotoImage(img)
+        logo_label.config(image=logo_img)
+        logo_label.image = logo_img
+    except Exception as e:
+        print("Logo load error:", e)
+
+# put your path here (you can change anytime)
+logo_path = r"C:\Users\Jana7\Downloads\logo.png"
+load_logo(logo_path, size=(120, 120))
+
+# =========================
+# MAIN LAYOUT
+# =========================
+main = tk.Frame(root, bg=BG_MAIN)
+main.pack(fill="both", expand=True, padx=15, pady=10)
+
+sidebar = tk.Frame(main, bg=BG_MAIN, width=360)
+sidebar.pack(side="left", fill="y", padx=(10, 12))
+sidebar.pack_propagate(False)
+
+content = tk.Frame(main, bg=BG_CONTENT)
+content.pack(side="right", fill="both", expand=True)
+content.pack_propagate(False)
+
+# =========================
+# Helpers
+# =========================
+def clear_content():
+    for w in content.winfo_children():
+        w.destroy()
+
+def require_patient():
+    if schedule is None:
+        messagebox.showerror("Error", "Please activate a patient first")
+        return False
+    return True
+
+def refresh_patient_list():
+    global meds_df, log_df
+    patients = list_patients(meds_df, log_df)
+    patient_combo["values"] = patients
+
+def set_patient_from_ui():
+    """Activate from entry OR combobox."""
+    global schedule, reminder
+    name = patient_entry.get().strip()
+
+    # if entry empty, try combobox selection
+    if not name:
+        selected = patient_combo.get().strip()
+        name = selected
+
+    if not name:
+        messagebox.showerror("Error", "Enter patient name or choose from the list.")
+        return
+
+    schedule = MedicationSchedule(name)
+    reminder = Reminder(schedule)
+    patient_status.config(text=f"Active Patient: {name}")
+
+    # update combobox values (in case new patient created)
+    refresh_patient_list()
+    patient_combo.set(name)
+
+def show_dataframe(df: pd.DataFrame, title: str):
+    """Show DataFrame in a Treeview (clean view)."""
+    clear_content()
+
+    ttk.Label(content, text=title, font=("Segoe UI", 18), background=BG_CONTENT, foreground="white")\
+        .pack(pady=(12, 8), anchor="w", padx=12)
+
+    if df is None or df.empty:
+        ttk.Label(content, text="No data to display.", background=BG_CONTENT, foreground="white")\
+            .pack(padx=12, pady=10, anchor="w")
+        return
+
+    container = tk.Frame(content, bg=BG_CONTENT)
+    container.pack(fill="both", expand=True, padx=12, pady=12)
+
+    cols = list(df.columns)
+
+    tree = ttk.Treeview(container, columns=cols, show="headings")
+    tree.pack(side="left", fill="both", expand=True)
+
+    vsb = ttk.Scrollbar(container, orient="vertical", command=tree.yview)
+    vsb.pack(side="right", fill="y")
+    tree.configure(yscrollcommand=vsb.set)
+
+    # headings
+    for c in cols:
+        tree.heading(c, text=c)
+        tree.column(c, width=130, anchor="center")
+
+    # rows
+    for _, row in df.iterrows():
+        values = [str(row[c]) for c in cols]
+        tree.insert("", "end", values=values)
+
+
+# =========================
+# Sidebar - Patient Controls
+# =========================
+ttk.Label(sidebar, text="Patient Name").pack(pady=(14, 4))
+patient_entry = ttk.Entry(sidebar)
+patient_entry.pack(fill="x", padx=6)
+
+patient_status = ttk.Label(sidebar, text="No active patient")
+patient_status.pack(pady=(8, 10))
+
+ttk.Label(sidebar, text="Existing Patients").pack(pady=(6, 4))
+patient_combo = ttk.Combobox(sidebar, state="readonly")
+patient_combo.pack(fill="x", padx=6)
+
+ttk.Button(sidebar, text="Activate / Switch Patient", command=set_patient_from_ui)\
+    .pack(fill="x", pady=10, padx=6)
+
+
+# =========================
+# Screens
+# =========================
+def add_med_screen():
+    if not require_patient(): return
+    clear_content()
+
+    ttk.Label(content, text="Add Medication", font=("Segoe UI", 18), background=BG_CONTENT, foreground="white")\
+        .grid(row=0, column=0, columnspan=2, pady=15, padx=10, sticky="w")
+
+    fields = [
+        ("Medication Name", "name"),
+        ("Dosage (mg)", "dose"),
+        ("Times per Day", "times"),
+        ("First Time (HH:MM)", "first"),
+        ("Duration (Days)", "duration"),
+        ("Start Date", "start")
+    ]
+
+    entries = {}
+    for i, (label, key) in enumerate(fields, start=1):
+        ttk.Label(content, text=label, width=22, anchor="e", background=BG_CONTENT, foreground="white")\
+            .grid(row=i, column=0, padx=10, pady=8, sticky="e")
+
+        e = ttk.Entry(content, width=30)
+        e.grid(row=i, column=1, padx=10, pady=8, sticky="w")
+        entries[key] = e
+
+    def save():
+        global meds_df
+        try:
+            med = Medication(
+                schedule.patient_name,
+                entries["name"].get(),
+                float(entries["dose"].get()),
+                int(entries["times"].get()),
+                parse_time_hhmm(entries["first"].get()),
+                int(entries["duration"].get()),
+                parse_date_flexible(entries["start"].get())
+            )
+            meds_df = schedule.add_medication(med, meds_df)
+            refresh_patient_list()
+            messagebox.showinfo("Success", "Medication added successfully")
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+
+    ttk.Button(content, text="Save Medication", command=save)\
+        .grid(row=len(fields)+1, column=0, columnspan=2, pady=16)
+
+
+def delete_med_screen():
+    if not require_patient(): return
+    clear_content()
+
+    ttk.Label(content, text="Delete Medication", font=("Segoe UI", 18), background=BG_CONTENT, foreground="white")\
+        .grid(row=0, column=0, columnspan=2, pady=15, padx=10, sticky="w")
+
+    ttk.Label(content, text="Medication Name", width=22, anchor="e", background=BG_CONTENT, foreground="white")\
+        .grid(row=1, column=0, padx=10, pady=10, sticky="e")
+
+    name_entry = ttk.Entry(content, width=30)
+    name_entry.grid(row=1, column=1, padx=10, pady=10, sticky="w")
+
+    def delete():
+        global meds_df
+        try:
+            meds_df = schedule.remove_medication(name_entry.get(), meds_df)
+            messagebox.showinfo("Deleted", "Medication removed")
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+
+    ttk.Button(content, text="Delete", command=delete)\
+        .grid(row=2, column=0, columnspan=2, pady=16)
+
+
+def daily_report_screen():
+    if not require_patient(): return
+    df = reminder.daily_report(meds_df, log_df, datetime.now().date())
+    show_dataframe(df, f"Daily Report — {schedule.patient_name}")
+
+
+def due_soon_screen():
+    if not require_patient(): return
+    df = reminder.due_soon(meds_df, datetime.now())
+    show_dataframe(df, f"Due Soon — {schedule.patient_name}")
+
+
+def log_dose_screen():
+    if not require_patient(): return
+    clear_content()
+
+    ttk.Label(content, text="Log Dose", font=("Segoe UI", 18), background=BG_CONTENT, foreground="white")\
+        .pack(pady=(14, 10), anchor="w", padx=12)
+
+    form = tk.Frame(content, bg=BG_CONTENT)
+    form.pack(padx=12, pady=10, anchor="w")
+
+    ttk.Label(form, text="Medication Name", background=BG_CONTENT, foreground="white").grid(row=0, column=0, sticky="e", padx=8, pady=6)
+    med_entry = ttk.Entry(form, width=28)
+    med_entry.grid(row=0, column=1, padx=8, pady=6, sticky="w")
+
+    ttk.Label(form, text="Time (HH:MM)", background=BG_CONTENT, foreground="white").grid(row=1, column=0, sticky="e", padx=8, pady=6)
+    time_entry = ttk.Entry(form, width=28)
+    time_entry.grid(row=1, column=1, padx=8, pady=6, sticky="w")
+
+    ttk.Label(form, text="Status", background=BG_CONTENT, foreground="white").grid(row=2, column=0, sticky="e", padx=8, pady=6)
+    status_combo = ttk.Combobox(form, values=["TAKEN", "MISSED"], state="readonly", width=25)
+    status_combo.set("TAKEN")
+    status_combo.grid(row=2, column=1, padx=8, pady=6, sticky="w")
+
+    def save():
+        global log_df
+        try:
+            log_df = log_dose(
+                schedule.patient_name,
+                med_entry.get(),
+                time_entry.get(),
+                status_combo.get(),
+                meds_df,
+                log_df
+            )
+            refresh_patient_list()
+            messagebox.showinfo("Success", "Dose logged")
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+
+    ttk.Button(content, text="Log", command=save).pack(pady=12, padx=12, anchor="w")
+
+
+def patient_df_screen():
+    if not require_patient(): return
+    df = schedule.get_patient_meds_df(meds_df)
+    show_dataframe(df, f"Patient Medications — {schedule.patient_name}")
+
+
+def all_df_screen():
+    # All patients meds, sorted nicely
+    df = meds_df.copy()
+    if not df.empty:
+        df = df.sort_values(["patient_name", "medication"]).reset_index(drop=True)
+    show_dataframe(df, "All Patients — Medications DataFrame")
+
+
+# =========================
+# 2-Column Menu (Fixes menu_frame error too)
+# =========================
+menu_frame = tk.Frame(sidebar, bg=BG_MAIN)
+menu_frame.pack(fill="both", expand=False, padx=6, pady=(12, 6))
+
+menu_frame.columnconfigure(0, weight=1)
+menu_frame.columnconfigure(1, weight=1)
+
+buttons = [
+    ("➕ Add Medication", add_med_screen),
+    ("🗑 Delete Medication", delete_med_screen),
+    ("📅 Daily Report", daily_report_screen),
+    ("⏰ Due Soon", due_soon_screen),
+    ("✍ Log Dose", log_dose_screen),
+    ("📋 Patient DataFrame", patient_df_screen),
+    ("📊 All DataFrame", all_df_screen),
+    ("❌ Exit", root.destroy),
+]
+
+for i, (text, cmd) in enumerate(buttons):
+    r = i // 2
+    c = i % 2
+    btn = ttk.Button(menu_frame, text=text, command=cmd)
+    btn.grid(row=r, column=c, padx=6, pady=6, sticky="ew")
+
+# Initialize combobox list
+refresh_patient_list()
+
+root.mainloop()
+
 
