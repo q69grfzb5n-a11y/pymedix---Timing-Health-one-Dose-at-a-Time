@@ -5,26 +5,14 @@ from datetime import datetime, timedelta, date
 import os
 
 
-# ================
-# Colored Output 
-# ================
+# =========================
+# Colored Output (optional)
+# =========================
 def print_blue(msg):
-    """
-    Print a message in blue color (ANSI escape code).
-    
-    Args:
-        msg: Any printable object (str/int/etc.)
-    """
     print("\033[94m" + str(msg) + "\033[0m")
 
 
 def print_red(msg):
-    """
-    Print a message in red color (ANSI escape code).
-    
-    Args:
-        msg: Any printable object (str/int/etc.)
-    """
     print("\033[91m" + str(msg) + "\033[0m")
 
 
@@ -32,18 +20,6 @@ def print_red(msg):
 # Validation + Parsing
 # =========================
 def ask_nonempty(prompt):
-    """
-    Ask the user for input and ensure it is not empty.
-
-    Args:
-        prompt (str): Prompt text shown to the user.
-
-    Returns:
-        str: Trimmed, non-empty input.
-
-    Raises:
-        ValueError: If input is empty.
-    """
     v = input(prompt).strip()
     if not v:
         raise ValueError("This field cannot be empty.")
@@ -51,18 +27,6 @@ def ask_nonempty(prompt):
 
 
 def ask_float_positive(prompt):
-    """
-    Ask the user for a positive float.
-
-    Args:
-        prompt (str): Prompt text shown to the user.
-
-    Returns:
-        float: A positive float value.
-
-    Raises:
-        ValueError: If input is not a valid positive float.
-    """
     try:
         v = float(input(prompt).strip())
         if v <= 0:
@@ -73,19 +37,6 @@ def ask_float_positive(prompt):
 
 
 def ask_int_min(prompt, min_value=1):
-    """
-    Ask the user for an integer >= a minimum value.
-
-    Args:
-        prompt (str): Prompt text shown to the user.
-        min_value (int): Minimum allowed integer value.
-
-    Returns:
-        int: Valid integer >= min_value.
-
-    Raises:
-        ValueError: If input is not valid or less than min_value.
-    """
     try:
         v = int(input(prompt).strip())
         if v < min_value:
@@ -96,18 +47,6 @@ def ask_int_min(prompt, min_value=1):
 
 
 def parse_time_hhmm(value):
-    """
-    Parse a HH:MM string into a datetime.time object.
-
-    Args:
-        value (str): Time string in HH:MM format.
-
-    Returns:
-        datetime.time: Parsed time.
-
-    Raises:
-        ValueError: If format is invalid.
-    """
     try:
         return datetime.strptime(value.strip(), "%H:%M").time()
     except:
@@ -115,24 +54,6 @@ def parse_time_hhmm(value):
 
 
 def parse_date_flexible(value):
-    """
-    Parse a date string using multiple formats into a datetime.date object.
-
-    Supported formats:
-        - YYYY-MM-DD
-        - YYYY/MM/DD
-        - DD/MM/YYYY
-        - DD-MM-YYYY
-
-    Args:
-        value (str): Date string.
-
-    Returns:
-        datetime.date: Parsed date.
-
-    Raises:
-        ValueError: If no supported format matches.
-    """
     patterns = ["%Y-%m-%d", "%Y/%m/%d", "%d/%m/%Y", "%d-%m-%Y"]
     for p in patterns:
         try:
@@ -159,29 +80,11 @@ LOG_COLUMNS = [
 
 
 def ensure_csv(filename, columns):
-    """
-    Ensure a CSV file exists; if not, create it with the given columns.
-
-    Args:
-        filename (str): Target CSV filename.
-        columns (list[str]): Column names for the CSV.
-    """
     if not os.path.exists(filename):
         pd.DataFrame(columns=columns).to_csv(filename, index=False)
 
 
 def _normalize_text_cols(df, cols):
-    """
-    Normalize specified columns as clean strings: fill NaN, cast to str, strip whitespace.
-    This prevents pandas .str accessor errors.
-
-    Args:
-        df (pd.DataFrame): Input DataFrame.
-        cols (list[str]): Columns to normalize.
-
-    Returns:
-        pd.DataFrame: Updated DataFrame with normalized text columns.
-    """
     for c in cols:
         if c not in df.columns:
             df[c] = ""
@@ -190,16 +93,9 @@ def _normalize_text_cols(df, cols):
 
 
 def load_meds():
-    """
-    Load medications CSV into a DataFrame and enforce expected schema.
-
-    Returns:
-        pd.DataFrame: Medications DataFrame with normalized text columns and numeric conversions.
-    """
     ensure_csv(MEDS_FILE, MEDS_COLUMNS)
     df = pd.read_csv(MEDS_FILE)
 
-    # ensure all expected columns exist even if file is weird
     for c in MEDS_COLUMNS:
         if c not in df.columns:
             df[c] = np.nan
@@ -207,7 +103,6 @@ def load_meds():
 
     df = _normalize_text_cols(df, ["patient", "medication", "first_time", "start_date"])
 
-    # safe numeric conversions
     df["dosage_mg"] = pd.to_numeric(df["dosage_mg"], errors="coerce")
     df["times_per_day"] = pd.to_numeric(df["times_per_day"], errors="coerce")
     df["duration_days"] = pd.to_numeric(df["duration_days"], errors="coerce")
@@ -216,12 +111,6 @@ def load_meds():
 
 
 def save_meds(df):
-    """
-    Save medications DataFrame to CSV, enforcing the expected column order.
-
-    Args:
-        df (pd.DataFrame): Medications DataFrame to save.
-    """
     df = df.copy()
     for c in MEDS_COLUMNS:
         if c not in df.columns:
@@ -231,12 +120,6 @@ def save_meds(df):
 
 
 def load_log():
-    """
-    Load dose log CSV into a DataFrame and enforce expected schema.
-
-    Returns:
-        pd.DataFrame: Log DataFrame with normalized text columns.
-    """
     ensure_csv(LOG_FILE, LOG_COLUMNS)
     df = pd.read_csv(LOG_FILE)
 
@@ -250,12 +133,6 @@ def load_log():
 
 
 def append_log(row_dict):
-    """
-    Append a single log record (row) to the log CSV.
-
-    Args:
-        row_dict (dict): A dictionary matching LOG_COLUMNS keys/fields.
-    """
     ensure_csv(LOG_FILE, LOG_COLUMNS)
     df = pd.read_csv(LOG_FILE)
 
@@ -272,40 +149,17 @@ def append_log(row_dict):
 # OOP
 # =========================
 class Medication:
-    """
-    Represents one medication course for a patient.
-    Includes schedule parameters and helper methods to compute dose times.
-    """
-
-    def _init_(self, patient, name, dosage_mg, times_per_day, first_time, duration_days, start_date):
-        """
-        Initialize a Medication object and validate inputs.
-
-        Args:
-            patient (str): Patient name.
-            name (str): Medication name.
-            dosage_mg (float): Dosage in mg.
-            times_per_day (int): Number of doses per day.
-            first_time (datetime.time): First dose time of day.
-            duration_days (int): Treatment duration in days.
-            start_date (datetime.date): Start date of course.
-        """
+    def __init__(self, patient, name, dosage_mg, times_per_day, first_time, duration_days, start_date):
         self.patient = patient
         self.name = name
         self.dosage_mg = dosage_mg
         self.times_per_day = times_per_day
-        self.first_time = first_time          # time object
+        self.first_time = first_time
         self.duration_days = duration_days
-        self.start_date = start_date          # date object
+        self.start_date = start_date
         self.validate()
 
     def validate(self):
-        """
-        Validate medication fields.
-
-        Raises:
-            ValueError: If any field is invalid.
-        """
         if not str(self.patient).strip():
             raise ValueError("Patient name required.")
         if not str(self.name).strip():
@@ -318,33 +172,12 @@ class Medication:
             raise ValueError("Duration must be >= 1.")
 
     def end_date(self):
-        """
-        Compute the end date of the medication course.
-
-        Returns:
-            datetime.date: End date (start_date + duration_days - 1).
-        """
         return self.start_date + timedelta(days=int(self.duration_days) - 1)
 
     def total_doses(self):
-        """
-        Compute the total number of doses across the full course.
-
-        Returns:
-            int: times_per_day * duration_days
-        """
         return int(self.times_per_day) * int(self.duration_days)
 
     def dose_datetimes_for_day(self, day):
-        """
-        Generate dose datetimes for a given day using NumPy offsets.
-
-        Args:
-            day (datetime.date): The day to compute doses for.
-
-        Returns:
-            list[datetime.datetime]: Dose datetimes for the day (empty if day out of range).
-        """
         if day < self.start_date or day > self.end_date():
             return []
 
@@ -355,15 +188,6 @@ class Medication:
         return [base + timedelta(hours=float(h)) for h in offsets]
 
     def next_dose_datetime(self, now):
-        """
-        Find the next scheduled dose datetime >= now, scanning forward in the course window.
-
-        Args:
-            now (datetime.datetime): Current time.
-
-        Returns:
-            datetime.datetime | None: Next dose datetime, or None if no future doses exist.
-        """
         for i in range(int(self.duration_days) + 1):
             d = now.date() + timedelta(days=i)
             for t in self.dose_datetimes_for_day(d):
@@ -372,12 +196,6 @@ class Medication:
         return None
 
     def to_row(self):
-        """
-        Convert the Medication object into a dict row suitable for CSV/DataFrame.
-
-        Returns:
-            dict: Row matching MEDS_COLUMNS fields.
-        """
         return {
             "patient": str(self.patient).strip(),
             "medication": str(self.name).strip(),
@@ -390,33 +208,10 @@ class Medication:
 
 
 class MedicationSchedule:
-    """
-    Manages medications for a single patient (CRUD operations on the meds DataFrame).
-    """
-
-    def _init_(self, patient_name):
-        """
-        Initialize schedule for a patient.
-
-        Args:
-            patient_name (str): Patient name.
-        """
+    def __init__(self, patient_name):
         self.patient_name = str(patient_name).strip()
 
     def add_medication(self, med_obj, meds_df):
-        """
-        Add a medication for the current patient (prevent duplicates by name).
-
-        Args:
-            med_obj (Medication): Medication object to add.
-            meds_df (pd.DataFrame): Medications DataFrame.
-
-        Returns:
-            pd.DataFrame: Updated DataFrame after adding and saving.
-
-        Raises:
-            ValueError: If duplicate medication exists for this patient.
-        """
         meds_df = meds_df.copy()
         meds_df = _normalize_text_cols(meds_df, ["patient", "medication", "first_time", "start_date"])
 
@@ -432,19 +227,6 @@ class MedicationSchedule:
         return meds_df
 
     def remove_medication(self, name, meds_df):
-        """
-        Remove a medication by name for the current patient.
-
-        Args:
-            name (str): Medication name to remove.
-            meds_df (pd.DataFrame): Medications DataFrame.
-
-        Returns:
-            pd.DataFrame: Updated DataFrame after removal and saving.
-
-        Raises:
-            ValueError: If medication not found.
-        """
         meds_df = meds_df.copy()
         meds_df = _normalize_text_cols(meds_df, ["patient", "medication"])
 
@@ -462,45 +244,16 @@ class MedicationSchedule:
         return meds_df
 
     def get_patient_meds_df(self, meds_df):
-        """
-        Filter the meds DataFrame to only the current patient's medications.
-
-        Args:
-            meds_df (pd.DataFrame): Medications DataFrame.
-
-        Returns:
-            pd.DataFrame: Copy of rows for the current patient.
-        """
         meds_df = meds_df.copy()
         meds_df = _normalize_text_cols(meds_df, ["patient"])
         return meds_df[meds_df["patient"].str.lower() == self.patient_name.lower()].copy()
 
 
 class Reminder:
-    """
-    Generates reports and due-soon checks for a patient's medication schedule.
-    Uses Medication objects reconstructed from DataFrame rows.
-    """
-
-    def _init_(self, schedule: MedicationSchedule):
-        """
-        Initialize reminder helper.
-
-        Args:
-            schedule (MedicationSchedule): Patient schedule manager.
-        """
+    def __init__(self, schedule: MedicationSchedule):
         self.schedule = schedule
 
     def _row_to_med(self, row):
-        """
-        Convert a DataFrame row into a Medication object.
-
-        Args:
-            row (pd.Series | dict): Medication row.
-
-        Returns:
-            Medication: Constructed Medication object.
-        """
         return Medication(
             patient=row["patient"],
             name=row["medication"],
@@ -512,17 +265,6 @@ class Reminder:
         )
 
     def taken_count_for_med(self, patient, med_name, log_df):
-        """
-        Count TAKEN logs for a given patient+medication.
-
-        Args:
-            patient (str): Patient name.
-            med_name (str): Medication name.
-            log_df (pd.DataFrame): Log DataFrame.
-
-        Returns:
-            int: Number of TAKEN records.
-        """
         log_df = log_df.copy()
         log_df = _normalize_text_cols(log_df, ["patient", "medication", "status"])
 
@@ -534,31 +276,10 @@ class Reminder:
         return int(f.sum())
 
     def remaining_doses_for_med(self, med_obj, log_df):
-        """
-        Compute remaining doses for a medication based on total_doses - taken_count.
-
-        Args:
-            med_obj (Medication): Medication object.
-            log_df (pd.DataFrame): Log DataFrame.
-
-        Returns:
-            int: Remaining dose count (>=0).
-        """
         taken = self.taken_count_for_med(med_obj.patient, med_obj.name, log_df)
         return max(0, med_obj.total_doses() - taken)
 
     def daily_report(self, meds_df, log_df, day: date):
-        """
-        Build a daily schedule report as a DataFrame for the patient.
-
-        Args:
-            meds_df (pd.DataFrame): Medications DataFrame.
-            log_df (pd.DataFrame): Log DataFrame.
-            day (datetime.date): Day to report.
-
-        Returns:
-            pd.DataFrame: Report with columns [Patient, Medication, Dosage (mg), Dose Time, Remaining Doses]
-        """
         patient_df = self.schedule.get_patient_meds_df(meds_df)
         rows = []
 
@@ -577,17 +298,6 @@ class Reminder:
         return df.sort_values(by="Dose Time") if not df.empty else df
 
     def due_soon(self, meds_df, now, window_minutes=15):
-        """
-        Check medications due within the next window_minutes.
-
-        Args:
-            meds_df (pd.DataFrame): Medications DataFrame.
-            now (datetime.datetime): Current time.
-            window_minutes (int): Time window in minutes.
-
-        Returns:
-            pd.DataFrame: Due soon table with [Medication, Next Dose, Minutes Left]
-        """
         patient_df = self.schedule.get_patient_meds_df(meds_df)
         rows = []
 
@@ -609,27 +319,9 @@ class Reminder:
 
 
 # =========================
-# Actions (Logging + Reports + Plots)
+# Actions
 # =========================
 def log_dose(patient, med_name, scheduled_time_hhmm, status, meds_df):
-    """
-    Log a dose event (TAKEN/MISSED) for the current patient and medication.
-
-    This validates:
-      - status is TAKEN or MISSED
-      - scheduled_time is valid HH:MM
-      - medication exists for that patient in meds_df
-
-    Args:
-        patient (str): Patient name.
-        med_name (str): Medication name.
-        scheduled_time_hhmm (str): Scheduled time in HH:MM.
-        status (str): "TAKEN" or "MISSED".
-        meds_df (pd.DataFrame): Medications DataFrame (for existence check).
-
-    Raises:
-        ValueError: If status/time invalid or medication not found for patient.
-    """
     status = status.strip().upper()
     if status not in ["TAKEN", "MISSED"]:
         raise ValueError("Status must be TAKEN or MISSED.")
@@ -659,18 +351,6 @@ def log_dose(patient, med_name, scheduled_time_hhmm, status, meds_df):
 
 
 def daily_summary_file(patient, meds_df, log_df):
-    """
-    Print and save a daily summary report (txt) for a given patient.
-
-    The report includes:
-      - Total scheduled doses = sum(times_per_day) for patient's meds
-      - TAKEN/MISSED counts from today's log entries
-
-    Args:
-        patient (str): Patient name.
-        meds_df (pd.DataFrame): Medications DataFrame.
-        log_df (pd.DataFrame): Log DataFrame.
-    """
     today = datetime.now().strftime("%Y-%m-%d")
 
     meds_df = meds_df.copy()
@@ -709,17 +389,6 @@ def daily_summary_file(patient, meds_df, log_df):
 
 
 def plot_remaining_doses(patient, meds_df, log_df):
-    """
-    Plot a bar chart showing remaining doses per medication for a patient.
-
-    Remaining doses are computed using:
-      remaining = total_doses (times_per_day * duration_days) - TAKEN_count
-
-    Args:
-        patient (str): Patient name.
-        meds_df (pd.DataFrame): Medications DataFrame.
-        log_df (pd.DataFrame): Log DataFrame.
-    """
     meds_df = meds_df.copy()
     meds_df = _normalize_text_cols(meds_df, ["patient"])
     patient_df = meds_df[meds_df["patient"].str.lower() == patient.lower()]
@@ -750,15 +419,6 @@ def plot_remaining_doses(patient, meds_df, log_df):
 # Menu
 # =========================
 def main():
-    """
-    Run the CLI menu loop for PyMedix.
-
-    Flow:
-      - Load meds + log data
-      - Ask for active patient
-      - Loop menu options:
-          add/delete/report/due/log/dataframes/plot/switch/report file/exit
-    """
     meds_df = load_meds()
     log_df = load_log()
 
@@ -851,8 +511,9 @@ def main():
             print_red(e)
 
 
-if _name_ == "_main_":
+if __name__ == "__main__":
     main()
+
 # ==========================================
 # PyMedix - Full Tkinter GUI (Multi-Patients)
 # (No Visualization) + Fixed Logo + 2-Column Menu
@@ -1540,6 +1201,7 @@ for i, (text, cmd) in enumerate(buttons):
 refresh_patient_list()
 
 root.mainloop()
+
 
 
 
