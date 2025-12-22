@@ -5,9 +5,9 @@ from datetime import datetime, timedelta, date
 import os
 
 
-# =========================
-# Colored Output (optional)
-# =========================
+# ================
+# Colored Output 
+# ================
 def print_blue(msg):
     """
     Print a message in blue color (ANSI escape code).
@@ -1540,5 +1540,6 @@ for i, (text, cmd) in enumerate(buttons):
 refresh_patient_list()
 
 root.mainloop()
+
 
 
