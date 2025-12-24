@@ -26,6 +26,7 @@ A Python-based system to manage multiple patients and their medications, track s
 - NumPy
 - Matplotlib
 - OOP Concepts
+- tkinter
 
 ---
 
