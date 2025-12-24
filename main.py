@@ -5,9 +5,9 @@ from datetime import datetime, timedelta, date
 import os
 
 
-# =========================
-# Colored Output (optional)
-# =========================
+# ================
+# Colored Output 
+# ===============
 def print_blue(msg):
     print("\033[94m" + str(msg) + "\033[0m")
 
@@ -387,6 +387,21 @@ def daily_summary_file(patient, meds_df, log_df):
 
     print_blue("Report saved: " + filename)
 
+class DoseSafety:
+    """
+    Provides side effect warnings if daily dosage is excessive.
+    """
+
+    def check_daily_doses(self, times_per_day):
+        if times_per_day > 4:
+            print_red(
+                "⚠ Possible Side Effects of Overdose:\n"
+                "- Nausea and vomiting\n"
+                "- Dizziness or headache\n"
+                "- Stomach pain\n"
+                "- Fatigue\n\n"
+                "Please consult a doctor." )
+
 
 def plot_remaining_doses(patient, meds_df, log_df):
     meds_df = meds_df.copy()
@@ -459,6 +474,9 @@ def main():
                     duration_days=ask_int_min("Duration days: ", 1),
                     start_date=parse_date_flexible(ask_nonempty("Start date: "))
                 )
+                safety = DoseSafety()
+                safety.check_daily_doses(times_per_day)
+                
                 meds_df = schedule.add_medication(med, meds_df)
                 print_blue("Medication added.")
 
@@ -1201,6 +1219,7 @@ for i, (text, cmd) in enumerate(buttons):
 refresh_patient_list()
 
 root.mainloop()
+
 
 
 
